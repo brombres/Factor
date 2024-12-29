@@ -1,0 +1,227 @@
+#================================================================================
+# Factor.rogue
+# December 28, 2024
+#================================================================================
+
+$define VERSION "1.0"
+$define DATE    "December 28, 2024"
+
+$requireRogue "2.34.3"
+
+uses Console/CommandLineParser
+
+try
+  Factor( System.command_line_arguments )
+catch (error:Error)
+  Console.error.println error
+  System.exit 1
+endTry
+
+class Factor
+  PROPERTIES
+    numbers = Int[]
+    factor_cache       = [Int:Int[]]
+    prime_factor_cache = [Int:Int[]]
+
+  METHODS
+    method init( args:String[] )
+      local command = parse_args( args )
+
+      if (command//options//help or args.count == 0)
+        print_usage
+        System.exit 0
+      endIf
+
+      local all    = command//options//all?
+      local factor = all or command//options//factor?
+      local gcd    = all or command//options//gcd? or command//options//gcf?
+      local lcm    = all or command//options//lcm?
+      local prime  = all or command//options//prime?
+      local reduce = all or command//options//reduce?
+
+      if (not gcd or lcm or prime or reduce) factor = true
+
+      forEach (arg in command//args)
+        local n = arg->Int
+        if (n+"" != arg)
+          error.println "All arguments must be integers - '$' is not an integer."(arg)
+          System.exit 1
+        endIf
+        numbers.add( n )
+      endForEach
+
+      if (factor)
+        forEach (n in numbers)
+          println "Factors of $: $"(n,factors(n))
+        endForEach
+      endIf
+
+      if (prime)
+        forEach (n in numbers)
+          println "Prime Factors of $: $"(n,prime_factors(n))
+        endForEach
+      endIf
+
+      local gcd_value : Int?
+      if ((gcd or reduce) and numbers.count)
+        local non_zero_numbers = numbers.discarding( $1 == 0 )
+        if (non_zero_numbers.is_empty)
+          if (gcd) println "GCD: undefined"
+        else
+          local f0 = factors( non_zero_numbers[0] )
+          forEach (d in f0 step -1)
+            contingent
+              forEach (n in non_zero_numbers from 1)
+                necessary (factors(n).contains(d))
+              endForEach
+              gcd_value = d
+              if (gcd) println "GCD: $"(d)
+              escapeForEach
+            endContingent
+          endForEach
+        endIf
+      endIf
+
+      if (lcm and numbers.count)
+        if (numbers.contains(0))
+          println "LCM: undefined"
+        else
+          local set = Set<<Int>>()
+          forEach (f in prime_factors(forEach in numbers))
+            if (f > 0) set.add( f )
+          endForEach
+
+          local result = 1
+          forEach (unique_n in set)
+            local max_count = 0
+            max_count .= or_larger( prime_factors(forEach in numbers).count(unique_n) )
+            result *= unique_n ^ max_count
+          endForEach
+          println "LCM: $"(result)
+
+        endIf
+      endIf
+
+      if (reduce)
+        if (gcd_value)
+          local reduced = numbers.map<<Int>>( $1 / gcd_value.value )
+          println "Reduced: $"(reduced.join(" "))
+        else
+          println "Reduced: Cannot reduce due to 0 value."
+        endIf
+      endIf
+
+    method factors( n:Int )->Int[]
+      if (factor_cache.contains(n)) return factor_cache[n]
+
+      if (n == 0)
+        local result = [0]
+        factor_cache[0] = result
+        return result
+      endIf
+
+      local is_negative = (n < 0)
+      n = n.abs
+
+      local result = [1]
+      forEach (d in 2..n/2)
+        if (n % d == 0) result.add( d )
+      endForEach
+      if (n > 1) result.add( n )
+
+      if (is_negative)
+        result = result.map<<Int>>( -$1 ).[reverse, add(result)]
+      endIf
+
+      factor_cache[n] = result
+      return result
+
+    method parse_args( args:String[] )->Variant
+      local command = CommandLineParser().
+      [
+        option( "--all",      &alias="-a" )
+        option( "--factor",   &alias="-f" )
+        option( "--gcd",      &alias="-g" )
+        option( "--gcf" )
+        option( "--lcm",      &alias="-l" )
+        option( "--help",     &aliases=["-h","-?"] )
+        option( "--prime",    &alias="-p" )
+        option( "--reduce",   &alias="-r" )
+      ].parse( args )
+      return command
+
+    method prime_factors( n:Int )->Int[]
+      if (prime_factor_cache.contains(n)) return prime_factor_cache[n]
+
+      which (n)
+        case -1
+          local result = [-1]
+          prime_factor_cache[-1] = result
+          return result
+        case 0, 1
+          local result = [n]
+          prime_factor_cache[n] = result
+          return result
+        others
+          local result = Int[]
+          prime_factor_cache[n] = result
+
+          if (n < 0)
+            result.add( -1 )
+            n = -n
+          endIf
+
+          while (n > 1)
+            local f = first_factor( n )
+            n /= f
+            result.add( f )
+          endWhile
+
+          return result
+      endWhich
+
+    method first_factor( n:Int )->Int
+      if (n % 2 == 0) return 2
+      forEach (d in 3..n.sqrt step 2)
+        if (n % d == 0) return d
+      endForEach
+      return n
+
+    method print_usage
+      println "Factor v$"(VERSION)
+      println "$"(DATE)
+      println
+
+      println @|USAGE
+               |  factor [OPTIONS] <integer> [<integer> ...]
+               |
+               |OPTIONS
+               |  --all, -a
+               |    Perform all operations: --factor, --gcd, --lcm, --prime, and --reduce.
+               |
+               |  --factor, -f
+               |    Prints all possible factors of each integer. For example,
+               |    'factor --factor 36' prints 'Factors of 36: [1,2,3,4,6,9,12,18,36]'. This is
+               |    the default operation if no other operations are selected.
+               |
+               |  --gcd, --gcf, -g
+               |    Prints the Greatest Common Divisor (GCD) of two or more integers. Also known
+               |    as the Greatest Common Factor (GCF). For example, 'factor --gcd 100 150'
+               |    prints 'GCD: 50'.
+               |
+               |  --help, -h, -?
+               |    Show this help text.
+               |
+               |  --lcm, -l
+               |    Prints the Least Common Multiple (LCM) of the prime factorizations of two or
+               |    more integers. For example, 'factor --lcm 100 150' prints 'LCM: 300'.
+               |
+               |  --prime, -p
+               |    Prints the prime factors of each integer that can be multiplied together to
+               |    produce the integer. For example, 'factor --prime 36' prints
+               |    'Prime Factors of 36: [2,2,3,3]'.
+               |
+               |  --reduce, -r
+               |    Reduces or simplifies integers by dividing out all common factors above 1.
+               |    For example, 'factor --reduce 640 480' prints 'Reduced: 4 3'.
+endClass
