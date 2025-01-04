@@ -39,7 +39,7 @@ class Factor
       local prime  = all or command//options//prime?
       local reduce = all or command//options//reduce?
 
-      if (not gcd or lcm or prime or reduce) factor = true
+      if (not (gcd or lcm or prime or reduce)) factor = true
 
       forEach (arg in command//args)
         local n = arg->Int
