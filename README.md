@@ -3,8 +3,8 @@ Command-line tool to factor one or more numbers. Includes reduction, GCF/GCD and
 
 About     | Current Release
 ----------|-----------------------
-Version   | 0.1
-Date      | December 28, 2024
+Version   | 1.0
+Date      | March 19, 2025
 Platforms | Windows, macOS, Linux
 License   | [MIT License](LICENSE)
 
